@@ -6,7 +6,6 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 import { UtensilsCrossed, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/login")({ component: LoginPage });
@@ -47,16 +46,15 @@ function LoginPage() {
 
   const handleGoogle = async () => {
     setGoogleLoading(true);
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin },
     });
-    if (result.error) {
+    if (error) {
       setGoogleLoading(false);
-      toast.error(result.error.message ?? "Google sign-in failed");
-      return;
+      toast.error(error.message ?? "Google sign-in failed");
     }
-    if (result.redirected) return;
-    navigate({ to: "/" });
+    // on success the browser redirects — no navigate() needed
   };
 
   return (

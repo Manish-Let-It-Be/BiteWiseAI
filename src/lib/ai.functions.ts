@@ -5,31 +5,89 @@ const AI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/com
 
 type Msg = { role: "system" | "user" | "assistant"; content: any };
 
-async function callGateway(messages: Msg[], opts?: { json?: boolean; model?: string }) {
+const FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+
+async function callGateway(messages: Msg[], opts?: { json?: boolean; model?: string }): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
-  const body: any = {
-    model: opts?.model ?? "gemini-2.5-flash",
-    messages,
-  };
-  if (opts?.json) body.response_format = { type: "json_object" };
 
-  const res = await fetch(AI_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    if (res.status === 429) throw new Error("Rate limited — try again in a moment.");
-    throw new Error(`AI error ${res.status}: ${text.slice(0, 200)}`);
+  const requestedModel = opts?.model ?? "gemini-2.5-flash";
+  const modelsToTry = [
+    requestedModel,
+    ...FALLBACK_MODELS.filter(m => m !== requestedModel)
+  ];
+
+  let lastError: any = null;
+
+  for (const model of modelsToTry) {
+    const body: any = {
+      model,
+      messages,
+    };
+    if (opts?.json) body.response_format = { type: "json_object" };
+
+    const maxRetries = 3;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const res = await fetch(AI_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          return data.choices?.[0]?.message?.content ?? "";
+        }
+
+        const text = await res.text();
+        const status = res.status;
+
+        if (status === 429) {
+          throw new Error("Rate limited — try again in a moment.");
+        }
+
+        if (status === 503 || status === 504) {
+          if (attempt < maxRetries) {
+            const delay = Math.pow(2, attempt) * 500; // 500ms, 1000ms, 2000ms
+            console.warn(`AI Gateway returned ${status} for ${model}. Retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+          throw new Error(`Model ${model} is experiencing high demand (status ${status}).`);
+        }
+
+        throw new Error(`AI error ${status}: ${text.slice(0, 200)}`);
+      } catch (err: any) {
+        lastError = err;
+        if (err.message && err.message.includes("Rate limited")) {
+          throw err;
+        }
+        break;
+      }
+    }
+    console.warn(`Model ${model} failed, attempting next model in fallback list if available...`);
   }
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content ?? "";
+
+  throw lastError ?? new Error("AI call failed after trying all fallback models");
 }
+
+// Mood-based dish suggestions
+export const aiMoodSuggest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { mood: string; dishes: { name: string; calories: number; price: number; tags?: string }[] }) => d)
+  .handler(async ({ data }) => {
+    const sys = `You are BiteWise AI. Given a mood and a list of dishes, pick the 3 best matches. Return ONLY valid JSON, no markdown.`;
+    const user = `Mood: "${data.mood}"
+Dishes: ${JSON.stringify(data.dishes)}
+Return JSON: { "picks": [{ "name": string, "reason": string }] }`;
+    const raw = await callGateway([{ role: "system", content: sys }, { role: "user", content: user }], { json: true });
+    try { return JSON.parse(raw) as { picks: { name: string; reason: string }[] }; }
+    catch { throw new Error("AI returned invalid JSON, please try again."); }
+  });
 
 // Plain chat with persistence
 export const aiChat = createServerFn({ method: "POST" })

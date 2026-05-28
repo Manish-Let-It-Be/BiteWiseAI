@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/lib/useAuth";
 import {
   fetchProfile, fetchDishes, fetchTodayLogs, fetchMonthLogs,
@@ -10,8 +11,10 @@ import { BudgetBar } from "@/components/BudgetBar";
 import { CalorieBar } from "@/components/CalorieBar";
 import { DishCard } from "@/components/DishCard";
 import { LogMealModal } from "@/components/LogMealModal";
-import { Sparkles, ArrowRight, BookOpen } from "lucide-react";
+import { Sparkles, ArrowRight, BookOpen, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { aiMoodSuggest } from "@/lib/ai.functions";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/")({ component: HomePage });
 
@@ -24,6 +27,10 @@ function HomePage() {
   const { user } = useAuth();
   const userId = user?.id ?? "";
   const [logTarget, setLogTarget] = useState<Dish | null>(null);
+  const [activeMood, setActiveMood] = useState<string | null>(null);
+  const [moodLoading, setMoodLoading] = useState(false);
+  const [moodPicks, setMoodPicks] = useState<{ name: string; reason: string }[] | null>(null);
+  const moodFn = useServerFn(aiMoodSuggest);
 
   const profileQ = useQuery({ queryKey: ["profile", userId], queryFn: () => fetchProfile(userId), enabled: !!userId });
   const dishesQ = useQuery({ queryKey: ["dishes"], queryFn: fetchDishes, enabled: !!userId });
@@ -35,6 +42,22 @@ function HomePage() {
   const calToday = sumCalories(todayQ.data ?? []);
   const dishes = dishesQ.data ?? [];
   const suggested = dishes.slice(0, 6);
+
+  const handleMood = async (mood: string) => {
+    if (moodLoading) return;
+    setActiveMood(mood);
+    setMoodPicks(null);
+    setMoodLoading(true);
+    try {
+      const dishList = dishes.map(d => ({ name: d.name, calories: d.calories, price: d.price }));
+      const res = await moodFn({ data: { mood, dishes: dishList } });
+      setMoodPicks(res.picks);
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setMoodLoading(false);
+    }
+  };
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -70,19 +93,54 @@ function HomePage() {
           <span className="text-xs uppercase tracking-widest font-semibold text-primary">Mood engine</span>
         </div>
         <h2 className="font-display text-xl font-bold mb-1">How are you feeling?</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          AI recommendations are coming soon. For now, pick a mood for inspiration and browse your library.
-        </p>
+        <p className="text-sm text-muted-foreground mb-4">Pick a mood and AI will suggest the best dishes from your library.</p>
         <div className="flex flex-wrap gap-2">
           {MOODS.map(m => (
             <button
               key={m}
-              className="px-3 py-1.5 rounded-full bg-secondary text-secondary-foreground text-sm font-medium hover:bg-primary hover:text-primary-foreground transition-colors"
+              onClick={() => handleMood(m)}
+              disabled={moodLoading}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                activeMood === m
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary text-secondary-foreground hover:bg-primary hover:text-primary-foreground"
+              }`}
             >
               {m}
             </button>
           ))}
         </div>
+        {moodLoading && (
+          <div className="flex items-center gap-2 mt-4 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Finding the best picks for you...
+          </div>
+        )}
+        {moodPicks && moodPicks.length > 0 && (
+          <div className="mt-4 space-y-2">
+            {moodPicks.map((p, i) => {
+              const dish = dishes.find(d => d.name.toLowerCase() === p.name.toLowerCase());
+              return (
+                <div key={i} className="flex items-start justify-between gap-3 bg-muted/50 rounded-xl px-4 py-3">
+                  <div>
+                    <div className="font-medium">{p.name}</div>
+                    <div className="text-xs text-muted-foreground italic">{p.reason}</div>
+                  </div>
+                  {dish && (
+                    <button
+                      onClick={() => setLogTarget(dish)}
+                      className="shrink-0 text-xs font-medium text-primary hover:underline"
+                    >
+                      Log
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {moodPicks && moodPicks.length === 0 && (
+          <p className="mt-4 text-sm text-muted-foreground">No matching dishes found. Try adding more dishes to your library.</p>
+        )}
       </section>
 
       <section>
