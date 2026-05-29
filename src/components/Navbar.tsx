@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { UtensilsCrossed, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -27,9 +27,7 @@ export function Navbar() {
     <header className="sticky top-0 z-40 bg-background/80 backdrop-blur border-b">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
         <Link to="/" className="flex items-center gap-2 shrink-0">
-          <span className="grid place-items-center h-9 w-9 rounded-xl bg-primary text-primary-foreground">
-            <UtensilsCrossed className="h-4 w-4" />
-          </span>
+          <img src="/BiteWiseT.png" alt="Bitewise Logo" className="h-12 w-12 object-contain" />
           <div className="flex flex-col leading-none">
             <span className="font-display font-bold text-lg">Bitewise</span>
             <span className="text-[10px] uppercase tracking-widest text-muted-foreground hidden sm:block">

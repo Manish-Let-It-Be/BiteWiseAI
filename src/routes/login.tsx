@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { UtensilsCrossed, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/login")({ component: LoginPage });
 
@@ -61,9 +61,7 @@ function LoginPage() {
     <div className="min-h-screen flex items-center justify-center p-6 bg-[var(--gradient-sunset)]">
       <div className="w-full max-w-md">
         <Link to="/" className="flex items-center gap-2 justify-center mb-8">
-          <span className="grid place-items-center h-11 w-11 rounded-2xl bg-primary text-primary-foreground shadow-[var(--shadow-card)]">
-            <UtensilsCrossed className="h-5 w-5" />
-          </span>
+          <img src="/BiteWiseT.png" alt="Bitewise Logo" className="h-20 w-20 object-contain" />
           <span className="font-display font-bold text-2xl">Bitewise AI</span>
         </Link>
 
